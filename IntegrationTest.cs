@@ -1,11 +1,15 @@
 using FlightManagementSystem.Infrastructure;
 using FlightManagementSystem.Models;
 using FlightManagementSystem.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using MongoDB.Driver.Linq;
 using Moq;
 using RabbitMQ.Client;
 using System.Text;
+using System.Threading;
+using System.Xml.Linq;
 
 namespace FlightManagementSystemTests
 {
@@ -53,6 +57,7 @@ namespace FlightManagementSystemTests
             while (!cancellationTokenSource.Token.IsCancellationRequested)
             {
                 var message = await rabbitMqService.ConsumeMessageAsync(cancellationTokenSource.Token);
+               
                 if (message != null)
                 {
                     consumedMessage = message;
@@ -72,7 +77,6 @@ namespace FlightManagementSystemTests
             Assert.AreEqual(flightMessage.Currency, consumedMessage.Currency);
             Assert.AreEqual(flightMessage.DepartureDate.ToString("o"), consumedMessage.DepartureDate.ToString("o"));
         }
-
     }
 
     [TestClass]
@@ -131,6 +135,7 @@ namespace FlightManagementSystemTests
         {
             // Arrange
             var loggerMock = new Mock<ILogger<PushNotificationService>>();
+           
             var service = new PushNotificationService(loggerMock.Object);
 
             var user = new User { Name = "John Doe", Email = "johnDoe@gmail.com" };
@@ -168,8 +173,8 @@ namespace FlightManagementSystemTests
     [TestClass]
     public class UserServiceItTests
     {
-        private IUserService _userService;
-        private IUserRepository _userRepository;
+        private IUserService? _userService;
+        private IUserRepository? _userRepository;
 
         [TestInitialize]
         public void TestInitialize()
@@ -189,19 +194,19 @@ namespace FlightManagementSystemTests
                 Email = "test123@example.com",
                 MobileDeviceToken = "TestDeviceToken123"
             };
-            var createdUser = await _userService.AddUserAsync(user);
+            var createdUser = await _userService!.AddUserAsync(user);
             Assert.IsNotNull(createdUser);
             Assert.AreEqual(user.Name, createdUser.Name);
 
             // Step 2: Define and add two UserAlertPreferences for the user
-            var alertPreference1 = new UserAlertPreference
+            var alertPreference1 = new AlertPreference
             {
                 PreferenceId = Guid.NewGuid().ToString(),
                 Destination = "New York",
                 MaxPrice = 500,
                 Currency = "USD"
             };
-            var alertPreference2 = new UserAlertPreference
+            var alertPreference2 = new AlertPreference
             {
                 PreferenceId = Guid.NewGuid().ToString(),
                 Destination = "Paris",
@@ -219,11 +224,11 @@ namespace FlightManagementSystemTests
 
             // Step 3: Read the user's preferences
             var userWithPreferences = await _userService.GetUserByIdAsync(createdUser.Id!);
-            Assert.IsNotNull(userWithPreferences.AlertPreferences);
+            Assert.IsNotNull(userWithPreferences!.AlertPreferences);
             Assert.AreEqual(2, userWithPreferences.AlertPreferences.Count);
 
             // Step 4: Update one of the UserAlertPreferences
-            var updatedPreference = new UserAlertPreference
+            var updatedPreference = new AlertPreference
             {
                 PreferenceId = alertPreference1.PreferenceId,
                 Destination = alertPreference1.Destination,
@@ -247,52 +252,188 @@ namespace FlightManagementSystemTests
 
             await _userService.DeleteUserAsync(createdUser.Id!);
         }
-
     }
 
-    //[TestClass]
-    //public class FlightPriceServiceItTests
-    //{
-    //    [TestMethod]
-    //    public async Task FetchFlightPricesAsync_ShouldLogFetching()
-    //    {
-    //        // Arrange
-    //        var loggerMock = new Mock<ILogger<FlightPriceService>>();
-    //        //var configMock = null;// new Mock<IConfiguration>();
-    //        var rabbitMqServiceMock = new Mock<IRabbitMqService>();
+    /*
+    [TestClass]
+    public class FlightPriceServiceItTests
+    {
+        [TestMethod]
+        public async Task IntegrationTest_FetchFlightPrices_ShouldlnotPublishMessages()
+        {
+            // Arrange
+            var factory = new ConnectionFactory { HostName = "localhost", UserName = "guest", Password = "guest" };
+        
+            var rabbitMqService = new RabbitMqService(new LoggerFactory().CreateLogger<RabbitMqService>(), factory);
 
-    //        var service = new FlightPriceService(loggerMock.Object, /*configMock.Object*/null, null, rabbitMqServiceMock.Object);
-    //        var cancellationToken = CancellationToken.None;
+            // var httpClientFactory = new HttpClientFactoryMock(); // Replace with mock or test HttpClientFactory
+            var logger = new LoggerFactory().CreateLogger<FlightPriceService>();
 
-    //        // Act
-    //        await service.FetchFlightPricesAsync(cancellationToken);
+            Mock<IHttpClientFactory> httpClientFactoryMock = new Mock<IHttpClientFactory>();
 
-    //        // Assert
-    //        loggerMock.Verify(l => l.LogInformation(It.IsAny<string>()), Times.AtLeastOnce);
-    //    }
-    //}
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    { "FlightAPIs:0", "https://mock-flight-api.com/prices" }
+                }).Build();
 
-    //[TestClass]
-    //public class NotificationServiceItTests
-    //{
-    //    [TestMethod]
-    //    public async Task ProcessNotification_ShouldSendAlerts()
-    //    {
-    //        // Arrange
-    //        var userServiceMock = new Mock<IUserService>();
-    //        var rabbitMqServiceMock = new Mock<IRabbitMqService>();
-    //        var pushNotificationServiceMock = new Mock<IPushNotificationService>();
+            var service = new FlightPriceService(logger, configuration, httpClientFactoryMock.Object, rabbitMqService);
 
-    //        var service = new NotificationService(userServiceMock.Object, rabbitMqServiceMock.Object, pushNotificationServiceMock.Object);
+            // Act
+            await service.FetchFlightPricesAsync(CancellationToken.None);
 
-    //        var cancellationToken = CancellationToken.None;
+            // Assert
+            // Consume from RabbitMQ and verify messages
+            var cancellationTokenSource = new CancellationTokenSource();
+           
+            cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(4)); //since the API is fake the consume will fail too
+          
+            var consumedMessage = await rabbitMqService.ConsumeMessageAsync(cancellationTokenSource.Token);
+          
+            Assert.IsNull(consumedMessage);
+        }
+    }
+    */
 
-    //        // Act
-    //        await service.StartAsync(cancellationToken);
+    [TestClass]
+    public class NotificationServiceItTests
+    {
+        private IMongoClient? _mongoClient;
+        private UserRepository? _repository;
 
-    //        // Assert
-    //        pushNotificationServiceMock.Verify(p => p.SendPushAlert(It.IsAny<string>()), Times.AtLeastOnce);
-    //    }
-    //}
+        [TestInitialize]
+        public void Setup()
+        {
+            // Prerequisite: Make sure MongoDB is running locally or in Docker
+            _mongoClient = new MongoClient("mongodb://localhost:27017");
+            _repository = new UserRepository(_mongoClient);
+        }
 
+        [TestMethod]
+        public async Task IntegrationTest_NotificationService_ShouldLogMatchedNotification()
+        {
+            // Arrange
+            var loggerMock = new Mock<ILogger<PushNotificationService>>();
+            var userService = new UserService(_repository!);
+
+            var user1 = await userService.AddUserAsync(new User { Name = "User1", Email = "user1@gmail.com" });
+            var user2 = await userService.AddUserAsync(new User { Name = "User2", Email = "user2@gmail.com" });
+
+            user1 = await userService.AddAlertPreferenceAsync(user1.Id!, new AlertPreference { MaxPrice = 1000, Destination = "Paris", Currency = "USD" }); // Alert
+            user1 = await userService.AddAlertPreferenceAsync(user1!.Id!, new AlertPreference { MaxPrice = 700, Destination = "Rome", Currency = "USD" }); // Alert
+            user1 = await userService.AddAlertPreferenceAsync(user1!.Id!, new AlertPreference { MaxPrice = 1300, Destination = "Zurich", Currency = "USD" }); // No Alert
+
+            user2 = await userService.AddAlertPreferenceAsync(user2.Id!, new AlertPreference { MaxPrice = 500, Destination = "London", Currency = "USD" }); // Alert
+            user2 = await userService.AddAlertPreferenceAsync(user2!.Id!, new AlertPreference { MaxPrice = 1200, Destination = "Zurich", Currency = "USD" }); // Alert
+
+            var pushNotificationServiceMock = new Mock<IPushNotificationService>();
+            pushNotificationServiceMock
+                .Setup(x => x.SendPushAlert(It.IsAny<string>()))
+                .Callback<string>(message => loggerMock.Object.LogInformation($"Push alert sent: {message}"));
+
+            var rabbitMqService = new RabbitMqService(new Mock<ILogger<RabbitMqService>>().Object, new ConnectionFactory
+            {
+                HostName = "localhost",
+                UserName = "guest",
+                Password = "guest"
+            });
+
+            try
+            {
+                var notificationService = new NotificationService(
+                    userService,
+                    rabbitMqService,
+                    pushNotificationServiceMock.Object
+                );
+
+                // Publish test messages to RabbitMQ
+                var flightMessages = new List<FlightNotification>
+                {
+                    new FlightNotification { FlightId = "100", Airline = "Airline3", Origin = "Tel-Aviv", Destination = "Zurich", Price = 1500, Currency = "USD", DepartureDate = DateTime.Now.AddDays(2) },
+                    new FlightNotification { FlightId = "101", Airline = "Airline1", Origin = "Tel-Aviv", Destination = "London", Price = 400, Currency = "USD", DepartureDate = DateTime.Now.AddDays(3) }, 
+                    new FlightNotification { FlightId = "102", Airline = "Airline2", Origin = "Tel-Aviv", Destination = "Paris", Price = 600, Currency = "USD", DepartureDate = DateTime.Now.AddDays(4) }, 
+                    new FlightNotification { FlightId = "104", Airline = "Airline2", Origin = "Tel-Aviv", Destination = "Rome", Price = 600, Currency = "USD", DepartureDate = DateTime.Now.AddDays(5) }, 
+                    new FlightNotification { FlightId = "105", Airline = "Airline3", Origin = "Tel-Aviv", Destination = "Zurich", Price = 1200, Currency = "USD", DepartureDate = DateTime.Now.AddDays(1) } 
+                };
+
+                foreach (var flightMessage in flightMessages)
+                {
+                    await rabbitMqService.PublishMessageAsync(flightMessage);
+                }
+
+                await Task.Delay(1000); // 1-second delay for RabbitMQ to process
+
+                uint queueSize = await rabbitMqService.GetQueueSize("FlightPricesQueue");
+
+                var cancellationTokenSource = new CancellationTokenSource();
+                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(7));
+
+                // Act
+                _ = notificationService.StartAsync(cancellationTokenSource.Token);
+
+                // Wait for processing
+                await Task.Delay(8000);
+
+                // Assert
+                loggerMock.Verify(
+                    x => x.Log(
+                        LogLevel.Information,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((state, t) => state.ToString()!.Contains("Push alert sent: Hi User1")),
+                        It.IsAny<Exception?>(),
+                        It.Is<Func<It.IsAnyType, Exception?, string>>((state, exception) => true)),
+                    Times.Exactly(3), // User1 should receive 4 alerts
+                    "Expected 3 notifications for User1 were not logged."
+                );
+
+                loggerMock.Verify(
+                    x => x.Log(
+                        LogLevel.Information,
+                        It.IsAny<EventId>(),
+                        It.Is<It.IsAnyType>((state, t) => state.ToString()!.Contains("Push alert sent: Hi User2")),
+                        It.IsAny<Exception?>(),
+                        It.Is<Func<It.IsAnyType, Exception?, string>>((state, exception) => true)),
+                    Times.Exactly(2), // User2 should receive 2 alerts
+                    "Expected 2 notifications for User2 were not logged."
+                );
+
+                // Clean up
+                cancellationTokenSource.Cancel();
+
+                if (user1 != null)
+                {
+                    await userService.DeleteUserAsync(user1.Id!);
+                }
+                if (user2 != null)
+                {
+                    await userService.DeleteUserAsync(user2.Id!);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    if (user1 != null)
+                    {
+                        Console.WriteLine($"Deleting User1: {user1.Id}");
+                        await userService.DeleteUserAsync(user1.Id!);
+                    }
+                    if (user2 != null)
+                    {
+                        Console.WriteLine($"Deleting User2: {user2.Id}");
+                        await userService.DeleteUserAsync(user2.Id!);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during cleanup: {ex.Message}");
+                }
+            }
+        }
+    }
 }
